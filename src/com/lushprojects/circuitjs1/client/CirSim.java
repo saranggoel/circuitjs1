@@ -5673,6 +5673,10 @@ MouseOutHandler, MouseWheelHandler {
 	toolbar.highlightButton(mouseModeStr);
     }
 
+    String getLabelTextForClass(String cls) {
+	return classToLabelMap.get(cls);
+    }
+
     // factors a matrix into upper and lower triangular matrices by
     // gaussian elimination.  On entry, a[0..n-1][0..n-1] is the
     // matrix to be factored.  ipvt[] returns an integer vector of pivot
