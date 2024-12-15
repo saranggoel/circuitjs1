@@ -185,6 +185,8 @@ public class Toolbar extends HorizontalPanel {
 	    variantButton.addClickHandler(event -> {
 		// Change the icon of the main button to reflect the variant selected
 		iconLabel.getElement().setInnerHTML(smallSvg);
+		highlightableButtons.remove(mainCommand.getItemName());
+                highlightableButtons.put(command.getItemName(), iconLabel);
 		paletteContainer.setVisible(false);
 		mainCommand.setItemName(command.getItemName());
 		command.execute();  // Execute the corresponding command for the selected variant
@@ -203,7 +205,7 @@ public class Toolbar extends HorizontalPanel {
 
 	    // Position the palette relative to the icon label
 	    int leftOffset = iconLabel.getAbsoluteLeft() - 12;
-	    int topOffset = iconLabel.getAbsoluteTop() + iconLabel.getOffsetHeight();
+	    int topOffset = iconLabel.getAbsoluteTop() + iconLabel.getOffsetHeight() - 2;
 	    paletteContainer.getElement().getStyle().setLeft(leftOffset, Style.Unit.PX);
 	    paletteContainer.getElement().getStyle().setTop(topOffset, Style.Unit.PX);
 	});
