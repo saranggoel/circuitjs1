@@ -146,6 +146,7 @@ MouseOutHandler, MouseWheelHandler {
     MenuItem elmSplitMenuItem;
     MenuItem elmSliderMenuItem;
     MenuItem elmFlipXMenuItem, elmFlipYMenuItem, elmFlipXYMenuItem;
+    MenuItem elmSwapMenuItem;
     MenuItem stackAllItem;
     MenuItem unstackAllItem;
     MenuItem combineAllItem;
@@ -820,6 +821,7 @@ MouseOutHandler, MouseWheelHandler {
 	elmMenuBar.addItem(elmCopyMenuItem = new MenuItem(Locale.LS("Copy"),new MyCommand("elm","copy")));
 	elmMenuBar.addItem(elmDeleteMenuItem = new MenuItem(Locale.LS("Delete"),new MyCommand("elm","delete")));
 	elmMenuBar.addItem(                    new MenuItem(Locale.LS("Duplicate"),new MyCommand("elm","duplicate")));
+	elmMenuBar.addItem(elmSwapMenuItem = new MenuItem(Locale.LS("Swap Terminals"),new MyCommand("elm","flip")));
 	elmMenuBar.addItem(elmFlipXMenuItem =  new MenuItem(Locale.LS("Flip X"),new MyCommand("elm","flipx")));
 	elmMenuBar.addItem(elmFlipYMenuItem =  new MenuItem(Locale.LS("Flip Y"),new MyCommand("elm","flipy")));
 	elmMenuBar.addItem(elmFlipXYMenuItem =  new MenuItem(Locale.LS("Flip XY"),new MyCommand("elm","flipxy")));
@@ -4725,6 +4727,7 @@ MouseOutHandler, MouseWheelHandler {
     	    	    	elmAddScopeMenuItem.setEnabled(mouseElm.canViewInScope() );
     	    	    }
     	    	    elmEditMenuItem .setEnabled(mouseElm.getEditInfo(0) != null);
+		    elmSwapMenuItem .setEnabled(mouseElm.getPostCount() == 2);
     	    	    elmSplitMenuItem.setEnabled(canSplit(mouseElm));
     	    	    elmSliderMenuItem.setEnabled(sliderItemEnabled(mouseElm));
 		    boolean canFlipX = mouseElm.canFlipX();
