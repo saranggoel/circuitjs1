@@ -120,6 +120,8 @@ public class circuitjs1 implements EntryPoint {
     }
 
     static String convertUnicodeEscapes(String input) {
+	if (input.indexOf("\\u") < 0)
+	    return input;
         StringBuilder result = new StringBuilder();
         int length = input.length();
         int i = 0;
