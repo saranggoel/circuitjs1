@@ -3517,7 +3517,8 @@ MouseOutHandler, MouseWheelHandler {
             		doDelete(false);
     		}
     		if (item=="undock") {
-    	    	    ScopeElm newScope = new ScopeElm(snapGrid(menuElm.x+50), snapGrid(menuElm.y+50));
+		    CircuitElm elm = s.getElm();
+    	    	    ScopeElm newScope = new ScopeElm(snapGrid(elm.x+50), snapGrid(elm.y+50));
     	    	    elmList.addElement(newScope);
     	    	    newScope.setElmScope(scopes[menuScope]);
     	    	    
