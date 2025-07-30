@@ -3565,7 +3565,7 @@ MouseOutHandler, MouseWheelHandler {
     	    pushUndo();
     	    readSetupFile("blank.txt", "Blank Circuit");
     	}
-    		
+    	
     	//	if (ac.indexOf("setup ") == 0) {
     	//	    pushUndo();
     	//	    readSetupFile(ac.substring(6),
@@ -3734,7 +3734,7 @@ MouseOutHandler, MouseWheelHandler {
     	    ct = scopes[i].separate(newscopes, ct);
 	scopes = newscopes;
 	scopeCount = ct;
-    }
+}
 
     void doEdit(Editable eable) {
     	clearSelection();
@@ -5075,7 +5075,7 @@ MouseOutHandler, MouseWheelHandler {
     	if (powerCheckItem.getState()) {
     	    powerLabel.setStyleName("disabled", false);
     	    powerBar.enable();
-    	} else {
+        } else {
     	    powerLabel.setStyleName("disabled", true);
     	    powerBar.disable();
     	}
@@ -6664,6 +6664,157 @@ MouseOutHandler, MouseWheelHandler {
 	    return arr;
 	}
 	
+	// Comprehensive simulation data export methods
+	public String exportSimulationData() {
+	    StringBuilder data = new StringBuilder();
+	    data.append("{\n");
+	    
+	    // Basic simulation state
+	    data.append("  \"simulationState\": ").append(getSimulationState()).append(",\n");
+	    
+	    // Error information
+	    data.append("  \"errorState\": ").append(getErrorState()).append(",\n");
+	    
+	    // Node voltages
+	    data.append("  \"nodeVoltages\": ").append(getNodeVoltages()).append(",\n");
+	    
+	    // Circuit elements data
+	    data.append("  \"elementData\": ").append(getElementData()).append(",\n");
+	    
+	    // Validation results
+	    data.append("  \"validationResults\": ").append(getValidationResults()).append("\n");
+	    
+	    data.append("}");
+	    return data.toString();
+	}
+	
+	public String getSimulationState() {
+	    StringBuilder state = new StringBuilder();
+	    state.append("{\n");
+	    state.append("    \"time\": ").append(t).append(",\n");
+	    state.append("    \"timeStep\": ").append(timeStep).append(",\n");
+	    state.append("    \"maxTimeStep\": ").append(maxTimeStep).append(",\n");
+	    state.append("    \"minTimeStep\": ").append(minTimeStep).append(",\n");
+	    state.append("    \"isRunning\": ").append(simRunning).append(",\n");
+	    state.append("    \"converged\": ").append(converged).append(",\n");
+	    state.append("    \"subIterations\": ").append(subIterations).append(",\n");
+	    state.append("    \"circuitNonLinear\": ").append(circuitNonLinear).append(",\n");
+	    state.append("    \"voltageSourceCount\": ").append(voltageSourceCount).append(",\n");
+	    state.append("    \"matrixSize\": ").append(circuitMatrixSize).append(",\n");
+	    state.append("    \"matrixFullSize\": ").append(circuitMatrixFullSize).append(",\n");
+	    state.append("    \"timeStepCount\": ").append(timeStepCount).append(",\n");
+	    state.append("    \"timeStepAccum\": ").append(timeStepAccum).append("\n");
+	    state.append("  }");
+	    return state.toString();
+	}
+	
+	public String getErrorState() {
+	    StringBuilder errors = new StringBuilder();
+	    errors.append("{\n");
+	    errors.append("    \"stopMessage\": \"").append(stopMessage != null ? stopMessage.replace("\"", "\\\"") : "").append("\",\n");
+	    errors.append("    \"hasErrors\": ").append(stopMessage != null).append(",\n");
+	    errors.append("    \"matrixSingular\": ").append(circuitMatrix == null).append(",\n");
+	    errors.append("    \"convergenceFailed\": ").append(!converged && simRunning).append(",\n");
+	    errors.append("    \"matrixSize\": ").append(circuitMatrixSize).append(",\n");
+	    errors.append("    \"hasMatrix\": ").append(circuitMatrix != null).append("\n");
+	    errors.append("  }");
+	    return errors.toString();
+	}
+	
+	public String getNodeVoltages() {
+	    StringBuilder nodes = new StringBuilder();
+	    nodes.append("{\n");
+	    if (nodeVoltages != null) {
+		nodes.append("    \"count\": ").append(nodeVoltages.length).append(",\n");
+		nodes.append("    \"values\": [");
+		for (int i = 0; i < nodeVoltages.length; i++) {
+		    if (i > 0) nodes.append(", ");
+		    nodes.append(nodeVoltages[i]);
+		}
+		nodes.append("],\n");
+		nodes.append("    \"lastValues\": [");
+		if (lastNodeVoltages != null) {
+		    for (int i = 0; i < lastNodeVoltages.length; i++) {
+			if (i > 0) nodes.append(", ");
+			nodes.append(lastNodeVoltages[i]);
+		    }
+		}
+		nodes.append("]\n");
+	    } else {
+		nodes.append("    \"count\": 0,\n");
+		nodes.append("    \"values\": [],\n");
+		nodes.append("    \"lastValues\": []\n");
+	    }
+	    nodes.append("  }");
+	    return nodes.toString();
+	}
+	
+	public String getElementData() {
+	    StringBuilder elements = new StringBuilder();
+	    elements.append("{\n");
+	    elements.append("    \"count\": ").append(elmList.size()).append(",\n");
+	    elements.append("    \"data\": [\n");
+	    for (int i = 0; i < elmList.size(); i++) {
+		CircuitElm ce = elmList.get(i);
+		elements.append("      {\n");
+		elements.append("        \"index\": ").append(i).append(",\n");
+		elements.append("        \"type\": \"").append(ce.getClass().getSimpleName()).append("\",\n");
+		elements.append("        \"postCount\": ").append(ce.getPostCount()).append(",\n");
+		elements.append("        \"current\": ").append(ce.getCurrent()).append(",\n");
+		elements.append("        \"voltageDiff\": ").append(ce.getVoltageDiff()).append(",\n");
+		elements.append("        \"power\": ").append(ce.getPower()).append(",\n");
+		elements.append("        \"selected\": ").append(ce.isSelected()).append(",\n");
+		elements.append("        \"nonLinear\": ").append(ce.nonLinear()).append(",\n");
+		
+		// Element-specific data
+		elements.append("        \"elementData\": {\n");
+		if (ce instanceof ResistorElm) {
+		    ResistorElm re = (ResistorElm) ce;
+		    elements.append("          \"resistance\": ").append(re.getResistance()).append("\n");
+		} else if (ce instanceof VoltageElm) {
+		    VoltageElm ve = (VoltageElm) ce;
+		    elements.append("          \"waveform\": ").append(ve.waveform).append(",\n");
+		    elements.append("          \"frequency\": ").append(ve.frequency).append(",\n");
+		    elements.append("          \"maxVoltage\": ").append(ve.maxVoltage).append(",\n");
+		    elements.append("          \"bias\": ").append(ve.bias).append("\n");
+		} else if (ce instanceof CapacitorElm) {
+		    CapacitorElm cap = (CapacitorElm) ce;
+		    elements.append("          \"capacitance\": ").append(cap.capacitance).append("\n");
+		} else if (ce instanceof InductorElm) {
+		    InductorElm ind = (InductorElm) ce;
+		    elements.append("          \"inductance\": ").append(ind.inductance).append("\n");
+		} else {
+		    String[] info = new String[10];
+		    ce.getInfo(info);
+		    elements.append("          \"info\": \"").append(info[0] != null ? info[0].replace("\"", "\\\"") : "").append("\"\n");
+		}
+		elements.append("        }\n");
+		
+		if (i < elmList.size() - 1) {
+		    elements.append("      },\n");
+		} else {
+		    elements.append("      }\n");
+		}
+	    }
+	    elements.append("    ]\n");
+	    elements.append("  }");
+	    return elements.toString();
+	}
+	
+	public String getValidationResults() {
+	    StringBuilder validation = new StringBuilder();
+	    validation.append("{\n");
+	    validation.append("    \"hasGround\": ").append(nodesWithGroundConnectionCount > 0).append(",\n");
+	    validation.append("    \"unconnectedNodes\": ").append(unconnectedNodes != null ? unconnectedNodes.size() : 0).append(",\n");
+	    validation.append("    \"wireInfoCount\": ").append(wireInfoList != null ? wireInfoList.size() : 0).append(",\n");
+	    validation.append("    \"nodeCount\": ").append(nodeList != null ? nodeList.size() : 0).append(",\n");
+	    validation.append("    \"nodesWithGroundConnectionCount\": ").append(nodesWithGroundConnectionCount).append(",\n");
+	    validation.append("    \"voltageSourceCount\": ").append(voltageSourceCount).append(",\n");
+	    validation.append("    \"scopeCount\": ").append(scopeCount).append("\n");
+	    validation.append("  }");
+	    return validation.toString();
+	}
+	
 	native void setupJSInterface() /*-{
 	    var that = this;
 	    $wnd.CircuitJS1 = {
@@ -6680,7 +6831,14 @@ MouseOutHandler, MouseWheelHandler {
 	        getElements: $entry(function() { return that.@com.lushprojects.circuitjs1.client.CirSim::getJSElements()(); } ),
 	        getCircuitAsSVG: $entry(function() { return that.@com.lushprojects.circuitjs1.client.CirSim::doExportAsSVGFromAPI()(); } ),
 	        exportCircuit: $entry(function() { return that.@com.lushprojects.circuitjs1.client.CirSim::dumpCircuit()(); } ),
-	        importCircuit: $entry(function(circuit, subcircuitsOnly) { return that.@com.lushprojects.circuitjs1.client.CirSim::importCircuitFromText(Ljava/lang/String;Z)(circuit, subcircuitsOnly); })
+	        importCircuit: $entry(function(circuit, subcircuitsOnly) { return that.@com.lushprojects.circuitjs1.client.CirSim::importCircuitFromText(Ljava/lang/String;Z)(circuit, subcircuitsOnly); }),
+	        // Enhanced simulation data export functions
+	        exportSimulationData: $entry(function() { return that.@com.lushprojects.circuitjs1.client.CirSim::exportSimulationData()(); }),
+	        getSimulationState: $entry(function() { return that.@com.lushprojects.circuitjs1.client.CirSim::getSimulationState()(); }),
+	        getErrorState: $entry(function() { return that.@com.lushprojects.circuitjs1.client.CirSim::getErrorState()(); }),
+	        getNodeVoltages: $entry(function() { return that.@com.lushprojects.circuitjs1.client.CirSim::getNodeVoltages()(); }),
+	        getElementData: $entry(function() { return that.@com.lushprojects.circuitjs1.client.CirSim::getElementData()(); }),
+	        getValidationResults: $entry(function() { return that.@com.lushprojects.circuitjs1.client.CirSim::getValidationResults()(); })
 	    };
 	    var hook = $wnd.oncircuitjsloaded;
 	    if (hook)
