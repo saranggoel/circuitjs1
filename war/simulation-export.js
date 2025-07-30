@@ -253,11 +253,21 @@ window.CircuitJS1SimulationExport = {
 
 // Auto-initialize when CircuitJS1 is loaded
 window.addEventListener('load', function() {
+    console.log('CircuitJS1 Simulation Export: Initializing...');
+    
     // Wait for CircuitJS1 to be available
     const checkCircuitJS = setInterval(() => {
         if (window.CircuitJS1) {
             clearInterval(checkCircuitJS);
             console.log('CircuitJS1 Simulation Export interface ready');
+            
+            // Test the interface
+            try {
+                const testData = window.CircuitJS1SimulationExport.exportCompleteSimulationData();
+                console.log('Simulation export test successful:', testData ? 'Data available' : 'No data');
+            } catch (error) {
+                console.error('Simulation export test failed:', error);
+            }
             
             // Set up automatic error detection
             if (window.CircuitJS1.onupdate) {
@@ -267,19 +277,49 @@ window.addEventListener('load', function() {
                     if (originalUpdate) originalUpdate(sim);
                     
                     // Check for errors automatically
-                    const issues = window.CircuitJS1SimulationExport.analyzeSimulationIssues();
-                    if (issues && (issues.errors.length > 0 || issues.warnings.length > 0)) {
-                        console.warn('Simulation issues detected:', issues);
-                        
-                        // Trigger custom event for external listeners
-                        window.dispatchEvent(new CustomEvent('circuitjs-simulation-issues', {
-                            detail: issues
-                        }));
+                    try {
+                        const issues = window.CircuitJS1SimulationExport.analyzeSimulationIssues();
+                        if (issues && (issues.errors.length > 0 || issues.warnings.length > 0)) {
+                            console.warn('Simulation issues detected:', issues);
+                            
+                            // Trigger custom event for external listeners
+                            window.dispatchEvent(new CustomEvent('circuitjs-simulation-issues', {
+                                detail: issues
+                            }));
+                        }
+                    } catch (error) {
+                        console.error('Error in automatic issue detection:', error);
                     }
                 };
             }
         }
     }, 100);
+    
+    // Timeout after 10 seconds
+    setTimeout(() => {
+        if (!window.CircuitJS1) {
+            console.error('CircuitJS1 not available after 10 seconds');
+        }
+    }, 10000);
+});
+
+// Add postMessage handler for simulation data export
+window.addEventListener('message', function(event) {
+    if (event.data && event.data.type === 'exportSimulationData') {
+        if (window.CircuitJS1SimulationExport) {
+            const simulationData = window.CircuitJS1SimulationExport.exportCompleteSimulationData();
+            const issues = window.CircuitJS1SimulationExport.analyzeSimulationIssues();
+            const suggestions = window.CircuitJS1SimulationExport.generateCorrectionSuggestions
+                ? window.CircuitJS1SimulationExport.generateCorrectionSuggestions()
+                : [];
+            event.source.postMessage(
+                { type: 'simulationDataExport', data: { simulationData, issues, suggestions } },
+                '*'
+            );
+        } else {
+            event.source.postMessage({ type: 'simulationDataExport', error: 'Simulation export not available' }, '*');
+        }
+    }
 });
 
 // Export for use in other modules
