@@ -50,6 +50,16 @@
       color: blue;
       font-weight: bold;
     }
+    
+    /* Button state styles */
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    button:not(:disabled) {
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -62,6 +72,7 @@
       <input type="text" id="user-input" placeholder="Tell the AI what to build..." required>
       <button type="submit">Send</button>
       <button type="button" id="export-btn">Export Data</button>
+      <button type="button" id="regenerate-btn">Regenerate with Simulation Context</button>
     </form>
   </div>
 
@@ -73,6 +84,32 @@
     const input = document.getElementById('user-input');
     const iframe = document.getElementById('circuitFrame');
     let circuitText = ''; // the working representation of the circuit
+    let lastExportedData = null; // store the last exported simulation data
+    let lastUserRequest = ''; // store the original user request
+    
+    // Button state management
+    function updateButtonStates() {
+      const regenerateBtn = document.getElementById('regenerate-btn');
+      const exportBtn = document.getElementById('export-btn');
+      
+      // Enable/disable regenerate button based on available data
+      if (lastExportedData && lastUserRequest) {
+        regenerateBtn.disabled = false;
+        regenerateBtn.title = 'Regenerate circuit using simulation data and original request';
+      } else {
+        regenerateBtn.disabled = true;
+        regenerateBtn.title = 'Need both exported data and original request to regenerate';
+      }
+      
+      // Enable/disable export button based on circuit availability
+      if (circuitText) {
+        exportBtn.disabled = false;
+        exportBtn.title = 'Export simulation data as JSON';
+      } else {
+        exportBtn.disabled = true;
+        exportBtn.title = 'No circuit available to export';
+      }
+    }
 
     function appendMessage(sender, text, type = 'normal') {
       const msg = document.createElement('div');
@@ -396,11 +433,176 @@ User dissatisfaction: mitigated by including exactly what was asked (correct par
       }
     }
 
+    // Regenerate circuit with simulation context
+    async function regenerateWithSimulationContext() {
+      if (!lastExportedData) {
+        appendMessage('System', 'No simulation data available. Please export data first.', 'error');
+        return;
+      }
+      
+      if (!lastUserRequest) {
+        appendMessage('System', 'No original request available. Please make a request first.', 'error');
+        return;
+      }
+      
+      // Validate that we have meaningful simulation data
+      if (!lastExportedData.simulationData && !lastExportedData.issues && !lastExportedData.suggestions) {
+        appendMessage('System', 'Simulation data appears empty or invalid. Please run the simulation and export again.', 'error');
+        return;
+      }
+      
+      try {
+        appendMessage('AI', 'Analyzing simulation results and regenerating circuit...', 'info');
+        
+        // Show what issues we found
+        if (lastExportedData.issues) {
+          const errorCount = lastExportedData.issues.errors?.length || 0;
+          const warningCount = lastExportedData.issues.warnings?.length || 0;
+          if (errorCount > 0 || warningCount > 0) {
+            appendMessage('Analysis', `Found ${errorCount} errors and ${warningCount} warnings to address`, 'info');
+          }
+        }
+        
+        // TODO: Define the regeneration prompt here
+        const regenerationPrompt = `
+Original Request: ${lastUserRequest}
+
+Simulation Data: ${JSON.stringify(lastExportedData, null, 2)}
+
+The simulation system will supply a JSON or report with details about the circuit's state (e.g. simulationState, errorState, validationResults, issues, suggestions, etc.). You must address all problems indicated by this feedback while preserving the user's intended design. Below are key steps and considerations for using the simulation feedback effectively:
+Check for Errors and Warnings
+Start by examining any errors or warnings in the simulation feedback (usually found in something like errorState or issues.errors). These often point to critical problems that prevent the circuit from functioning or simulating correctly. Common critical errors include:
+"wire loop detected": This error means there is a closed loop of wires or conductors with effectively no resistance (a direct short loop) in the circuit. The simulator found a node or set of nodes shorted together in a loop, making the simulation matrix unsolvable. To fix this:
+
+
+Identify any unintended loop of wires or conductors. For example, check if wires are connecting in a circle or if a node inadvertently connects back to itself. This often happens if multiple ground symbols or supply rails are wired together incorrectly, creating a direct short, or if two points are connected by parallel paths of zero resistance.
+
+
+Remove or break the loop. For instance, remove any redundant wire segment or connection creating the circular path. In rare cases, introducing a very small resistor can break a perfect conductivity loop (though adding a resistor is usually a last resort unless the user expects it). The cleaner fix is to eliminate the unintended short circuit.
+
+
+Check ground connections carefully. Remember that all ground symbols usually represent the same node internally, so do not wire ground-to-ground; doing so creates a loop. If the circuit text or schematic had wires explicitly connecting ground symbols together, remove those wires. One ground symbol is sufficient to reference that node.
+
+
+After adjustments, ensure no purely conductive loops remain unless intentionally designed (which is very unlikely in typical user circuits). The error should disappear once the loop is removed.
+
+
+"Circuit matrix is singular" (e.g. matrixSingular=true): This error often accompanies a wire loop or indicates floating/unreferenced nodes. A singular matrix means the simulator cannot solve the node equations, typically due to an undefined reference or a short circuit. To resolve this:
+
+
+Ensure the circuit has a reference ground. If the feedback's validation results indicate no ground (hasGround false), add a ground node (see the "No ground reference" fix below).
+
+
+Ensure every node is connected into the circuit (no completely floating sections). A floating node (like an input with nothing defining its voltage) can cause singularities. Tie off floating nodes through a high-value resistor to ground or to some reference if needed, so that every node's voltage is defined.
+
+
+Make sure there is at least one independent source or initial condition. A matrix can be singular if the circuit consists only of reactive components (capacitors, inductors) with no source to drive them and no initial conditions, leaving some values indeterminate.
+
+
+Look for conflicting sources. Two different voltage sources connected directly together (without isolation) will cause a singular matrix or unrealistic condition. If the user's design inadvertently has, say, a 5 V source shorted to a 9 V source, you must separate them or remove one, interpreting the intended design correctly (perhaps the user described something incorrectly). Each distinct supply should not be directly tied to another at differing voltages.
+
+
+"no ground reference" (or similar ground errors): The feedback explicitly says the circuit has no ground node. This is a straightforward fix: add a ground reference to the circuit. The suggestions might even include a snippet like "g 100 100 100 120 0" (which is an example of adding a ground symbol at given coordinates). You can use that suggestion or place your own ground symbol at a logical location in the schematic. Ensure that the ground is connected into the circuit (for example, connect the negative terminals of power supplies to ground, and any reference nodes that should be 0 V). After adding ground, the validationResults.hasGround should turn true, and the error will resolve. (Keep in mind that multiple ground symbols are all the same node; you only need one ground unless the schematic requires distinct reference points.)
+
+
+Convergence or Simulation Failed (e.g. "convergence failed" in the log or a convergenceFailed=true flag): This indicates the simulator started but could not converge on a solution, often due to extremely rapid changes, stiffness in the circuit, or numerical issues:
+
+
+Ensure no short circuits or missing power connections exist, as these can cause unusual behavior that prevents convergence.
+
+
+If nonlinearity or fast dynamics are an issue (for instance, a circuit with very fast oscillations or abrupt switching), the simulation time step might need to be smaller, or initial conditions might need setting. Often our default time step (like 5e-6) is fine, but if the circuit is very sensitive, consider reducing it further or providing a starting condition.
+
+
+If the circuit has very slow dynamics (e.g., a 1 Hz blinking LED or a slow integrator), the default simulation duration (often around 20 ms for quick tests) is too short to observe a full cycle. In such cases, increase the total simulation run time (for a 1 Hz blink, simulate at least 1–2 seconds) so the intended behavior can manifest. The lack of visible behavior could otherwise be mistaken for a non-working circuit.
+
+
+Sometimes the simulator will suggest adjustments in error messages (like reducing time step or enabling certain options). Incorporate those if they are provided.
+
+
+Follow Simulator Suggestions
+The simulation feedback may include a suggestions list with recommended fixes or actions. Each suggestion typically has an action (e.g. "add_ground", "check_connections") and a description, and sometimes even a circuitModification hint. Use these suggestions as a guide to correct the circuit, as long as they align with the user's intent:
+Implement explicit fixes: If a suggestion clearly pinpoints a needed change (e.g., Add a ground node to the circuit along with a sample ground component line), then apply it. In the ground example, you would indeed add a ground symbol. You need not use the exact coordinates given in the suggestion if they conflict with your layout, but you must incorporate the component itself (and keep any required syntax, like the trailing 0 which might indicate orientation/style for ground).
+
+
+Investigate generic suggestions: If the suggestion is more general, like "action": "check_connections" with a description to check for floating nodes or short circuits, you will need to manually inspect the circuit. Look at the provided data (e.g., validationResults.unconnectedNodes or any element readings) to locate floating nodes or unintended shorts. For instance, if unconnectedNodes is greater than 0, identify those nodes and connect them appropriately (maybe through resistors or by rerouting wires). If an element in elementData shows zero current or voltage when it shouldn't, that could hint at a section of the circuit not actually connected as intended.
+
+
+Apply minimal changes: If a suggestion recommends adding a component or changing a value for stability (for example, adding a resistor to ground to give a reference to a floating input, or changing a component value), do so only if it does not violate the user's described design. Always prefer the least intrusive fix. For instance, adding a large-value resistor to ground on a floating input pin can stabilize the simulation without affecting the intended operation, and is a mild correction. However, drastically changing a component value (like reducing a resistor by a factor of 100) might alter the behavior in a way the user didn't intend, so avoid big changes unless absolutely necessary and justified by the user's goals.
+
+
+Address All Issues Before Output
+Before presenting the refined circuit, make sure all errors and important warnings have been resolved:
+Go through each item in the error list (issues.errors) and warnings (issues.warnings). Even if the circuit runs (no fatal error), warnings can indicate suboptimal or unintended conditions (for example, a warning about an unconnected input node won't stop the simulation, but it means part of the circuit is floating, which is bad practice and could lead to unpredictable behavior).
+
+
+Use the validation data as a checklist. If validationResults.unconnectedNodes is not zero, find those nodes and properly connect or terminate them. Every node should either connect to a component on both ends or be tied to a reference (like ground through a resistor, if it's an input).
+
+
+Ensure there's at least one ground connection noted in nodesWithGroundConnectionCount (it should be >= 1 once a ground is added). Typically, all major circuit sections share a common ground unless the user is intentionally creating isolated circuits (which would be unusual without mention).
+
+
+Double-check the presence of power sources. If validationResults.voltageSourceCount or the count of power sources is 0 but the circuit is supposed to be powered, you may have missed adding a power supply or the user's description of the supply was not translated into the schematic. Add any necessary voltage or current sources so the circuit has the intended power rails.
+
+
+In summary, do not deliver a circuit that still has known issues. The goal is a clean simulation result: no error flags, no unintended floating nodes, and all parts of the circuit properly connected and referenced.
+
+
+Preserve User Intent While Fixing
+While making these corrections, it's crucial to maintain the original intent and functionality the user described. Your fixes should not remove or fundamentally change the core components or the behavior the user expects, but rather support that intent by resolving underlying issues:
+Add only missing essentials: If the user forgot to include a necessary part like a ground reference or a power supply connection, add it. If a component needs a small supporting part (like a decoupling capacitor, a bias resistor, etc.) for the circuit to work realistically, consider adding it only if it does not conflict with what the user wants.
+
+
+Correct obvious mistakes: Sometimes users may inadvertently describe something that is clearly an error (like shorting the outputs of two different logic gates, or connecting two power sources together). You should fix these by interpreting what they likely meant. For example, if an IC is unpowered in the description, assume a reasonable power supply for it rather than leaving it floating.
+
+
+Adjust orientation or wiring, not the idea: If a component is installed incorrectly (e.g., an LED oriented the wrong way, a transistor's pins swapped), fix the orientation or wiring so that the component can function. The user's intent was for the LED to light or the transistor to switch; they likely wouldn't object to flipping the LED anode/cathode if it was reversed in the initial draft.
+
+
+Use context cues: For instance, if the user describes that an LED should light up when a certain condition is met, but the simulation shows zero current through that LED, that's a sign something is wrong in the setup (the LED might be reverse-biased or not connected in the path). You should rewire it or add a proper current-limiting resistor as needed to achieve the described behavior. Do this kind of fix whenever you see a discrepancy between the described behavior and the initial circuit's actual behavior.
+
+
+Respect given values: Avoid changing component values significantly unless the simulation or suggestions indicate the chosen value is causing a problem and the user's instructions allow flexibility. For example, if a user chose a very large resistor that effectively prevents any noticeable current (thus nothing happens in simulation), you might feel tempted to lower it. But unless the user hinted they weren't sure about the value or a suggestion explicitly says to adjust it, it's safer to keep the user's values. Only make value adjustments as a last resort or when clearly warranted.
+Verify Simulation Results vs. Expected Behavior
+In addition to fixing explicit errors, you should proactively verify that the simulation results align with the behavior the user expects for each part of the circuit. Even if the simulator reports no errors or warnings, the circuit might not be doing what the user wanted. The assistant should have a mental expectation of how the circuit should behave based on the user's description, and confirm the simulation output matches this. For example:
+Anticipate expected outcomes: From the user's prompt, determine what each component or section is supposed to do. Is an LED supposed to light up or blink? Should a transistor be switching on and off? Is a sensor output expected to read a certain voltage? Have an idea of the normal currents, voltages, or signals you expect to see at key points.
+
+
+Compare simulation data to these expectations: Once you simulate (or conceptually analyze) the refined circuit, check if those expectations are met. If an LED was meant to light when a button is pressed, does the simulation show current through the LED when the button node is active? If a timing circuit was supposed to oscillate, do you see the oscillating waveform in the simulator's results? If an amplifier should amplify a signal, is the output indeed a larger version of the input?
+
+
+Identify and fix mismatches: If any component's behavior in simulation doesn't match the intended behavior, treat it as an issue to fix even if the simulator isn't flagging an error. For instance, if an LED stays dark when it should glow, check whether the LED is oriented correctly (anode to positive, cathode to ground through a resistor) and whether there is a proper current-limiting resistor and sufficient supply voltage. If a transistor is never turning on, verify its gate/base is being driven as expected and that the transistor type (NPN vs PNP, N-channel vs P-channel) and placement make sense for the described logic. Essentially, use your electronics knowledge to debug why the expected outcome isn't happening.
+
+
+Refine the design accordingly: Make the necessary adjustments to achieve the expected results. This could include flipping a component, adding a missing connection, or adjusting a parameter. Be careful here to still align with user intent—e.g., if the user didn't mention needing a resistor and the LED won't light because there's none, it's usually safe to infer one should be added to limit current. Or if an IC output isn't driving as expected, perhaps the IC wasn't powered – provide the proper power connection. After any such tweak, you would run the simulation again (if possible) to verify the behavior now matches the expectation.
+
+
+By having and using these expectations, you catch subtle issues that pure error-checking might miss. The goal is not just a circuit that runs without errors, but one that actually performs the function the user wanted. Even in the absence of explicit simulator errors, this step ensures the final output is truly correct and satisfies the user's requirements.
+Following all the above steps will help ensure that the refined circuit is free of simulation errors, incorporates all feedback suggestions, and behaves as intended by the user. Always double-check that the final circuit meets the functional expectations described in the prompt, and present the corrected circuit with confidence that it will simulate and work as the user envisioned.
+`;
+
+        const newCircuit = await sendToChatGPT(regenerationPrompt);
+        circuitText = newCircuit;
+        
+        appendMessage('AI', 'Circuit regenerated successfully!', 'success');
+        appendMessage('System', 'Loading regenerated circuit into simulator...', 'info');
+        
+        importCircuit(circuitText);
+        startSimulation();
+        
+      } catch (error) {
+        appendMessage('AI', `Error regenerating circuit: ${error.message}`, 'error');
+      }
+    }
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const userMessage = input.value;
+      lastUserRequest = userMessage; // Store the original request
       appendMessage('You', userMessage);
       input.value = '';
+      
+      updateButtonStates(); // Update button states
 
       try {
         const prompt = `Current Circuit:\n${circuitText}\n\nUser Request: ${userMessage}\n\nGenerate EXACTLY what the user asks for. If they ask for an LED circuit, include an LED component. If they ask for a 9V battery, use 9V. Be precise and complete.`;
@@ -426,6 +628,10 @@ User dissatisfaction: mitigated by including exactly what was asked (correct par
               appendMessage('Simulation', `Results: ${JSON.stringify(results)}`);
             } else {
               // Enhanced simulation analysis
+              lastExportedData = exportResults; // Store the exported data
+              
+              updateButtonStates(); // Update button states after export
+              
               const { simulationData, issues, suggestions } = exportResults;
               
               if (issues && (issues.errors.length > 0 || issues.warnings.length > 0)) {
@@ -478,6 +684,7 @@ User dissatisfaction: mitigated by including exactly what was asked (correct par
         if (exportResults.error) {
           appendMessage('Export', `Error: ${exportResults.error}`, 'error');
         } else {
+          lastExportedData = exportResults; // Store the exported data
           const { simulationData, issues, suggestions } = exportResults;
           
           // Create downloadable JSON file
@@ -504,6 +711,11 @@ User dissatisfaction: mitigated by including exactly what was asked (correct par
       }
     });
 
+    // Regenerate button handler
+    document.getElementById('regenerate-btn').addEventListener('click', async () => {
+      await regenerateWithSimulationContext();
+    });
+
     // Check API key on load
     window.addEventListener('load', () => {
       if (CONFIG.OPENAI_API_KEY === 'YOUR_OPENAI_API_KEY') {
@@ -512,6 +724,8 @@ User dissatisfaction: mitigated by including exactly what was asked (correct par
         appendMessage('System', 'Ready to build circuits!', 'success');
         appendMessage('System', 'Try: "Create a simple LED circuit with a 9V battery and 220 ohm resistor"', 'info');
       }
+      
+      updateButtonStates(); // Set initial button states
     });
   </script>
 </body>
